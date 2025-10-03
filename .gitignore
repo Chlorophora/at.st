@@ -1,0 +1,32 @@
+# --- 本番固有のファイルを Git 管理外にする ---
+/frontend/.env
+/backend/.env
+
+# --- 環境ごとのログや一時ファイル ---
+*.log
+*.tmp
+*.swp
+.DS_Store
+Thumbs.db
+
+# --- Node.js 関連 ---
+/frontend/node_modules/
+/frontend/.svelte-kit/
+/frontend/build/
+/frontend/package-lock.json
+/frontend/src/lib/components/admin/
+/frontend/src/lib/components/shared/
+/frontend/src/routes/admin/
+
+# --- Rust / Cargo 関連 ---
+/backend/node_modules/
+/backend/target/
+/backend/.sqlx/
+/backend/tests/
+/backend/src/admin/
+/backend/src/users.rs
+/backend/src/archive_posts.rs
+
+# --- 証明書やNginxは本番専用なのでGit管理しない ---
+/nginx/
+/certbot/

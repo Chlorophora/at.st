@@ -1,0 +1,109 @@
+name: Rust CI for Backend
+
+on:
+  push:
+    branches: [ "main" ]
+    paths: # backend ディレクトリ内の変更があった場合のみトリガー
+      - 'backend/**'
+      - '.github/workflows/rust_ci.yml' # ワークフロー自体の変更もトリガー
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/rust_ci.yml'
+
+env:
+  CARGO_TERM_COLOR: always
+  # ローカルの .env ファイルで SQLX_OFFLINE=true になっていることを想定。
+  # CIでのビルド時はこれが使われ、テスト実行時はワークフロー内で SQLX_OFFLINE=false を設定します。
+
+jobs:
+  build_and_test_backend:
+    name: Build and Test Backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+
+    services:
+      postgres:
+        image: postgres:15 # プロジェクトで使用している PostgreSQL のバージョンに合わせてください
+        env:
+          POSTGRES_USER: ${{ secrets.TEST_DB_USER || 'user' }}
+          POSTGRES_PASSWORD: ${{ secrets.TEST_DB_PASSWORD || 'password' }}
+          POSTGRES_DB: ${{ secrets.TEST_DB_NAME || 'bulletin_board_test' }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: 1.87.0
+        override: true
+        components: clippy, rustfmt
+        profile: minimal # インストール時間を短縮
+
+    - name: Cache Cargo dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          backend/target/
+        key: ${{ runner.os }}-cargo-backend-${{ hashFiles('backend/Cargo.lock', 'backend/rust-toolchain.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-backend-
+
+    - name: Run cargo fmt (check)
+      run: cargo fmt --all -- --check
+
+    - name: Run cargo build (debug)
+      run: cargo build --verbose
+
+    - name: Run cargo clippy
+      run: cargo clippy --all-targets -- -D warnings
+
+    - name: Cache sqlx-cli
+      id: cache-sqlx-cli
+      uses: actions/cache@v4
+      with:
+        path: ~/.cargo/bin/sqlx
+        key: ${{ runner.os }}-sqlx-cli-0.7.4
+
+    # sqlx-cliのインストール
+    # backend/Cargo.toml の sqlx のバージョンに合わせて調整
+    - name: Install sqlx-cli
+      if: steps.cache-sqlx-cli.outputs.cache-hit != 'true'
+      run: cargo install sqlx-cli --version 0.7.4 --no-default-features --features rustls,postgres --force
+
+    # データベースマイグレーションの実行
+    # backend/migrations ディレクトリを想定
+    - name: Run database migrations
+      run: sqlx migrate run
+      env:
+        DATABASE_URL: "postgres://${{ secrets.TEST_DB_USER || 'user' }}:${{ secrets.TEST_DB_PASSWORD || 'password' }}@localhost:5432/${{ secrets.TEST_DB_NAME || 'bulletin_board_test' }}"
+
+    # オフラインビルドのためのクエリ情報を生成
+    - name: Run sqlx prepare
+      run: sqlx prepare --check
+      env:
+        DATABASE_URL: "postgres://${{ secrets.TEST_DB_USER || 'user' }}:${{ secrets.TEST_DB_PASSWORD || 'password' }}@localhost:5432/${{ secrets.TEST_DB_NAME || 'bulletin_board_test' }}"
+
+    - name: Run cargo test
+      run: cargo test --verbose
+      env:
+        DATABASE_URL: "postgres://${{ secrets.TEST_DB_USER || 'user' }}:${{ secrets.TEST_DB_PASSWORD || 'password' }}@localhost:5432/${{ secrets.TEST_DB_NAME || 'bulletin_board_test' }}"
+        RUST_LOG: "info,niwatori=debug,sqlx=debug" # テスト時のログレベルを調整
+        SQLX_OFFLINE: "false" # テスト実行時はオンラインでDBに接続
+        # 他にテストに必要な環境変数があればここに追加

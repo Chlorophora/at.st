@@ -1,0 +1,21 @@
+diff --git a/node_modules/svelte-hcaptcha/src/HCaptcha.svelte b/node_modules/svelte-hcaptcha/src/HCaptcha.svelte
+index 42c57f4..c2fb393 100644
+--- a/node_modules/svelte-hcaptcha/src/HCaptcha.svelte
++++ b/node_modules/svelte-hcaptcha/src/HCaptcha.svelte
+@@ -11,10 +11,12 @@
+ 
+   declare var hcaptcha: any;
+ 
+-  export enum CaptchaTheme {
+-    DARK = 'dark',
+-    LIGHT = 'light',
+-  }
++  export const CaptchaTheme = {
++    DARK: 'dark',
++    LIGHT: 'light'
++  } as const;
++
++  export type CaptchaTheme = (typeof CaptchaTheme)[keyof typeof CaptchaTheme];
+ </script>
+ 
+ <script lang="ts">
